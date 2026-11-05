@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="description" content="Chess Puzzles — 100 mate-in-N chess puzzles. Find the forced checkmate. Free HTML5 game.">
+<title>Chess Puzzles · Mate in N</title>
+<script>
+// 平台 SDK 按域名条件加载（独立运行时完全不加载，游戏行为不变）
+(function () {
+  var host = location.hostname || "";
+  try {
+    if (host.indexOf("crazygames") !== -1) {
+      var s1 = document.createElement("script");
+      s1.src = "https://sdk.crazygames.com/crazygames-sdk-v3.js";
+      s1.onload = function () {
+        if (window.CrazyGames && window.CrazyGames.SDK) {
+          window.CrazyGames.SDK.init().then(function () {
+            try { window.CrazyGames.SDK.game.loadingStart(); } catch (e) {}
+            window.addEventListener("load", function () { try { window.CrazyGames.SDK.game.loadingStop(); } catch (e) {} });
+          }).catch(function () {});
+        }
+      };
+      document.head.appendChild(s1);
+      window.__portal = "crazygames";
+    } else if (host.indexOf("gamedistribution") !== -1 || host.indexOf("html5.gamedistribution.com") !== -1 || host.indexOf("gd.games") !== -1) {
+      var s2 = document.createElement("script");
+      s2.src = "https://sdk.gamedistribution.com/v2/main.min.js";
+      document.head.appendChild(s2);
+      window.__portal = "gamedistribution";
+    }
+  } catch (e) {}
+})();
+</script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; overflow:hidden; background:#1c2418; font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif; }
+  #wrap { height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .view { display:none; width:100%; height:100%; }
+  /* ---- 顶部条 ---- */
+  #topbar { width:100%; max-width:560px; display:flex; justify-content:space-between; align-items:center; padding:8px 12px 4px; color:#e9eadf; gap:8px; }
+  .tbtn { background:#3a4a30; color:#e9eadf; border:1px solid #55684a; border-radius:9px; padding:7px 12px; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap; }
+  .tbtn:active { transform:scale(.96); }
+  #pinfo { font-size:13px; font-weight:700; color:#cfe0b8; text-align:center; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #mateinfo { font-size:12px; font-weight:800; color:#ffd76a; }
+  #timer { font-size:14px; font-weight:800; min-width:44px; text-align:center; }
+  #mistakes { color:#ff8a7a; font-size:12px; font-weight:800; }
+  /* ---- 棋盘 ---- */
+  #boardWrap { position:relative; display:flex; flex-direction:column; align-items:center; }
+  canvas { display:block; border-radius:10px; touch-action:none; box-shadow:0 6px 24px rgba(0,0,0,.45); }
+  #status { min-height:22px; color:#cfe0b8; font-size:13px; padding:6px 10px 2px; text-align:center; font-weight:600; }
+  #status.err { color:#ff9a8a; }
+  /* ---- 覆盖层 ---- */
+  .overlay { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(8,12,6,.8); z-index:10; }
+  .panel { background:#26331e; border:1px solid #4a5c3a; border-radius:18px; padding:24px 30px; text-align:center; color:#fff; max-width:92vw; max-height:88vh; overflow-y:auto; }
+  .panel h1 { font-size:24px; margin-bottom:4px; letter-spacing:1px; }
+  .panel h2 { font-size:20px; margin-bottom:6px; }
+  .panel p { color:#b9c8a4; font-size:13px; margin-bottom:12px; }
+  .bigbtn { background:linear-gradient(135deg,#6fa845,#4d7a2e); color:#fff; border:none; border-radius:12px; padding:12px 30px; font-size:15px; font-weight:800; cursor:pointer; margin:6px; }
+  .bigbtn.alt { background:#3a4a30; }
+  .bigbtn:active { transform:scale(.97); }
+  /* ---- 菜单 ---- */
+  #mStats { display:flex; gap:26px; justify-content:center; margin:10px 0 16px; }
+  .stat .label { font-size:10px; color:#93a67d; letter-spacing:1px; }
+  .stat .val { font-size:20px; font-weight:900; color:#e9eadf; }
+  .level { display:block; width:100%; background:#314026; border:1px solid #55684a; border-radius:14px; padding:14px 18px; margin:8px 0; color:#fff; cursor:pointer; text-align:left; }
+  .level:hover { background:#3a4c2d; }
+  .level .nm { font-size:16px; font-weight:800; display:flex; justify-content:space-between; align-items:center; }
+  .level .prog { font-size:12px; color:#a9bd8f; margin-top:3px; }
+  .level .go { font-size:12px; font-weight:800; color:#ffd76a; }
+  .level.locked { opacity:.55; cursor:default; }
+  /* ---- 谜题格 ---- */
+  #pgrid { display:grid; grid-template-columns:repeat(5,1fr); gap:7px; margin-top:10px; }
+  .pz { background:#314026; border:1px solid #55684a; border-radius:10px; color:#fff; padding:7px 2px 5px; cursor:pointer; font-size:15px; }
+  .pz b { display:block; }
+  .pz i { display:block; font-style:normal; font-size:8.5px; color:#a9bd8f; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:0 2px; }
+  .pz.done { background:#4d7a2e; border-color:#7fae57; }
+  .pz.done i { color:#dff0c8; }
+  #foot { color:#6c7d58; font-size:11px; padding:8px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <!-- 菜单 -->
+  <div class="view" id="viewMenu">
+    <div class="panel" style="border:none;background:none;">
+      <h1 style="color:#e9eadf;">CHESS PUZZLES</h1>
+      <p>Find the forced checkmate in every position.</p>
+      <div id="mStats">
+        <div class="stat"><div class="label">SOLVED</div><div class="val" id="mSolved">0 / 100</div></div>
+        <div class="stat"><div class="label">STREAK</div><div class="val" id="mStreak">0</div></div>
+      </div>
+      <button class="level" id="lvl1"><span class="nm">Mate in 1 <span class="go">Play</span></span><span class="prog"></span></button>
+      <button class="level" id="lvl2"><span class="nm">Mate in 2 <span class="go">Play</span></span><span class="prog"></span></button>
+      <button class="level" id="lvl3"><span class="nm">Mate in 3 <span class="go">Play</span></span><span class="prog"></span></button>
+      <div id="foot">100 hand-checked puzzles · White always delivers mate</div>
+    </div>
+  </div>
+  <!-- 谜题列表 -->
+  <div class="view" id="viewGrid">
+    <div class="panel" style="width:96vw;max-width:520px;">
+      <h2 id="gridTitle">Puzzles</h2>
+      <div id="pgrid"></div>
+      <div style="margin-top:14px;"><button class="bigbtn alt" id="backMenu2">‹ Menu</button></div>
+    </div>
+  </div>
+  <!-- 对局 -->
+  <div class="view" id="viewPlay" style="flex-direction:column;">
+    <div id="topbar">
+      <button class="tbtn" id="backMenu1">‹</button>
+      <div style="text-align:center;flex:1;min-width:0;">
+        <div id="pinfo">Puzzle</div>
+        <div id="mateinfo">Mate in 1</div>
+      </div>
+      <div style="text-align:center;">
+        <div id="timer">0:00</div>
+        <div id="mistakes"></div>
+      </div>
+      <button class="tbtn" id="btnRestart">↻</button>
+      <button class="tbtn" id="btnMute">♪</button>
+    </div>
+    <div id="boardWrap">
+      <canvas id="board"></canvas>
+      <div id="status">White to move.</div>
+    </div>
+  </div>
+  <!-- 胜利 -->
+  <div class="overlay" id="overlayWin">
+    <div class="panel">
+      <h2 id="winTitle">Checkmate!</h2>
+      <p id="winSub"></p>
+      <p id="winStreak" style="color:#ffd76a;font-weight:800;"></p>
+      <button class="bigbtn" id="btnWinNext">Next Puzzle ›</button>
+      <button class="bigbtn alt" id="btnWinList">Puzzle List</button>
+      <button class="bigbtn alt" id="btnWinMenu">Menu</button>
+    </div>
+  </div>
+</div>
+<script>
+"use strict";
+"use strict";
+// ============================================================
+// Chess Puzzles — 走子引擎（纯逻辑，无 DOM 依赖）
+// 棋盘: 64 数组, sq = rank*8 + file, rank 0 = 第 1 横排(白方底线)
+// 棋子: "PNBRQK" 白 / "pnbrqk" 黑
+// move: {from, to, promo:""|"q"|"r"|"b"|"n", flag:""| "d"双步 |"e"吃过路兵 |"k"/"q"王车易位}
+// ============================================================
+
+function parseFEN(fen) {
+  var parts = fen.trim().split(/\s+/);
+  var board = new Array(64);
+  for (var i = 0; i < 64; i++) board[i] = null;
+  var rows = parts[0].split("/");
+  for (var r = 0; r < 8; r++) {
+    var row = rows[7 - r], f = 0;
+    for (var k = 0; k < row.length; k++) {
+      var ch = row[k];
+      if (ch >= "1" && ch <= "8") f += parseInt(ch, 10);
+      else { board[r * 8 + f] = ch; f++; }
+    }
+  }
+  var st = { board: board, turn: parts[1] || "w", castling: (parts[2] && parts[2] !== "-") ? parts[2] : "", ep: -1 };
+  if (parts[3] && parts[3] !== "-") st.ep = (parts[3].charCodeAt(1) - 49) * 8 + (parts[3].charCodeAt(0) - 97);
+  return st;
+}
+
+function toFEN(st) {
+  var rows = [];
+  for (var r = 7; r >= 0; r--) {
+    var row = "", empty = 0;
+    for (var f = 0; f < 8; f++) {
+      var p = st.board[r * 8 + f];
+      if (!p) { empty++; continue; }
+      if (empty) { row += empty; empty = 0; }
+      row += p;
+    }
+    if (empty) row += empty;
+    rows.push(row);
+  }
+  return rows.join("/") + " " + st.turn + " " + (st.castling || "-") + " " + (st.ep >= 0 ? sqName(st.ep) : "-") + " 0 1";
+}
+
+function sqName(s) { return "abcdefgh"[s % 8] + (Math.floor(s / 8) + 1); }
+function parseSq(n) { return (n.charCodeAt(1) - 49) * 8 + (n.charCodeAt(0) - 97); }
+function parseMove(s) { return { from: parseSq(s.slice(0, 2)), to: parseSq(s.slice(2, 4)), promo: s.length > 4 ? s[4] : "", flag: "" }; }
+function moveKey(m) { return sqName(m.from) + sqName(m.to) + (m.promo || ""); }
+
+var KNIGHT_OFFS = [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]];
+var KING_OFFS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+var DIAG = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+var ORTH = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+// sq 是否被 byWhite 一方攻击
+function isAttacked(board, sq, byWhite) {
+  var r = sq >> 3, f = sq & 7, i, rr, ff, p;
+  // 兵: 白兵在 r-1 行斜吃, 黑兵在 r+1 行斜吃
+  var pr = byWhite ? r - 1 : r + 1;
+  if (pr >= 0 && pr < 8) {
+    if (f > 0 && board[pr * 8 + f - 1] === (byWhite ? "P" : "p")) return true;
+    if (f < 7 && board[pr * 8 + f + 1] === (byWhite ? "P" : "p")) return true;
+  }
+  for (i = 0; i < 8; i++) {
+    rr = r + KNIGHT_OFFS[i][0]; ff = f + KNIGHT_OFFS[i][1];
+    if (rr >= 0 && rr < 8 && ff >= 0 && ff < 8 && board[rr * 8 + ff] === (byWhite ? "N" : "n")) return true;
+  }
+  for (i = 0; i < 8; i++) {
+    rr = r + KING_OFFS[i][0]; ff = f + KING_OFFS[i][1];
+    if (rr >= 0 && rr < 8 && ff >= 0 && ff < 8 && board[rr * 8 + ff] === (byWhite ? "K" : "k")) return true;
+  }
+  for (i = 0; i < 4; i++) {
+    rr = r + DIAG[i][0]; ff = f + DIAG[i][1];
+    while (rr >= 0 && rr < 8 && ff >= 0 && ff < 8) {
+      p = board[rr * 8 + ff];
+      if (p) { if (byWhite ? (p === "B" || p === "Q") : (p === "b" || p === "q")) return true; break; }
+      rr += DIAG[i][0]; ff += DIAG[i][1];
+    }
+  }
+  for (i = 0; i < 4; i++) {
+    rr = r + ORTH[i][0]; ff = f + ORTH[i][1];
+    while (rr >= 0 && rr < 8 && ff >= 0 && ff < 8) {
+      p = board[rr * 8 + ff];
+      if (p) { if (byWhite ? (p === "R" || p === "Q") : (p === "r" || p === "q")) return true; break; }
+      rr += ORTH[i][0]; ff += ORTH[i][1];
+    }
+  }
+  return false;
+}
+
+function kingSq(board, white) {
+  var k = white ? "K" : "k";
+  for (var i = 0; i < 64; i++) if (board[i] === k) return i;
+  return -1;
+}
+
+function inCheck(st) {
+  var white = st.turn === "w";
+  return isAttacked(st.board, kingSq(st.board, white), !white);
+}
+
+function addPawnMoves(ms, from, to, white) {
+  var last = white ? 7 : 0;
+  if ((to >> 3) === last) {
+    var ps = ["q", "r", "b", "n"];
+    for (var i = 0; i < 4; i++) ms.push({ from: from, to: to, promo: ps[i], flag: "" });
+  } else ms.push({ from: from, to: to, promo: "", flag: "" });
+}
+
+function genPseudo(st) {
+  var ms = [], b = st.board, white = st.turn === "w", i, rr, ff, s, p;
+  for (s = 0; s < 64; s++) {
+    p = b[s];
+    if (!p) continue;
+    if ((p === p.toUpperCase()) !== white) continue;
+    var r = s >> 3, f = s & 7, t = p.toLowerCase();
+    if (t === "p") {
+      var dir = white ? 8 : -8, start = white ? 1 : 6;
+      var one = s + dir;
+      if (one >= 0 && one < 64 && !b[one]) {
+        addPawnMoves(ms, s, one, white);
+        if (r === start && !b[s + 2 * dir]) ms.push({ from: s, to: s + 2 * dir, promo: "", flag: "d" });
+      }
+      for (var df = -1; df <= 1; df += 2) {
+        var ff2 = f + df;
+        if (ff2 < 0 || ff2 > 7) continue;
+        var to = one + df;
+        if (to < 0 || to >= 64) continue;
+        if (b[to] && (b[to] === b[to].toUpperCase()) !== white) addPawnMoves(ms, s, to, white);
+        else if (to === st.ep && !b[to]) ms.push({ from: s, to: to, promo: "", flag: "e" });
+      }
+    } else if (t === "n" || t === "k") {
+      var offs = t === "n" ? KNIGHT_OFFS : KING_OFFS;
+      for (i = 0; i < offs.length; i++) {
+        rr = r + offs[i][0]; ff = f + offs[i][1];
+        if (rr < 0 || rr > 7 || ff < 0 || ff > 7) continue;
+        var q = rr * 8 + ff;
+        if (!b[q] || (b[q] === b[q].toUpperCase()) !== white) ms.push({ from: s, to: q, promo: "", flag: "" });
+      }
+    } else {
+      var rays = t === "b" ? DIAG : t === "r" ? ORTH : KING_OFFS;
+      for (i = 0; i < rays.length; i++) {
+        rr = r + rays[i][0]; ff = f + rays[i][1];
+        while (rr >= 0 && rr < 8 && ff >= 0 && ff < 8) {
+          var q2 = rr * 8 + ff;
+          if (!b[q2]) ms.push({ from: s, to: q2, promo: "", flag: "" });
+          else { if ((b[q2] === b[q2].toUpperCase()) !== white) ms.push({ from: s, to: q2, promo: "", flag: "" }); break; }
+          rr += rays[i][0]; ff += rays[i][1];
+        }
+      }
+    }
+  }
+  // 王车易位: 权利存在 + 中间格空 + 现在不在被将 + 经过的格不被攻击
+  if (white) {
+    if (st.castling.indexOf("K") >= 0 && !b[5] && !b[6] && b[4] === "K" && b[7] === "R" &&
+        !isAttacked(b, 4, false) && !isAttacked(b, 5, false) && !isAttacked(b, 6, false))
+      ms.push({ from: 4, to: 6, promo: "", flag: "k" });
+    if (st.castling.indexOf("Q") >= 0 && !b[3] && !b[2] && !b[1] && b[4] === "K" && b[0] === "R" &&
+        !isAttacked(b, 4, false) && !isAttacked(b, 3, false) && !isAttacked(b, 2, false))
+      ms.push({ from: 4, to: 2, promo: "", flag: "q" });
+  } else {
+    if (st.castling.indexOf("k") >= 0 && !b[61] && !b[62] && b[60] === "k" && b[63] === "r" &&
+        !isAttacked(b, 60, true) && !isAttacked(b, 61, true) && !isAttacked(b, 62, true))
+      ms.push({ from: 60, to: 62, promo: "", flag: "k" });
+    if (st.castling.indexOf("q") >= 0 && !b[59] && !b[58] && !b[57] && b[60] === "k" && b[56] === "r" &&
+        !isAttacked(b, 60, true) && !isAttacked(b, 59, true) && !isAttacked(b, 58, true))
+      ms.push({ from: 60, to: 58, promo: "", flag: "q" });
+  }
+  return ms;
+}
+
+function makeMove(st, m) {
+  var b = st.board.slice(), white = st.turn === "w";
+  var p = b[m.from];
+  var cast = st.castling;
+  b[m.to] = m.promo ? (white ? m.promo.toUpperCase() : m.promo) : p;
+  b[m.from] = null;
+  if (m.flag === "e") b[m.to + (white ? -8 : 8)] = null;          // 吃过路兵: 移除被吃的兵
+  else if (m.flag === "k") { b[m.to - 1] = b[m.to + 1]; b[m.to + 1] = null; }   // O-O 车入内格
+  else if (m.flag === "q") { b[m.to + 1] = b[m.to - 2]; b[m.to - 2] = null; }   // O-O-O
+  if (p === "K") cast = cast.replace("K", "").replace("Q", "");
+  else if (p === "k") cast = cast.replace("k", "").replace("q", "");
+  if (m.from === 7 || m.to === 7) cast = cast.replace("K", "");
+  if (m.from === 0 || m.to === 0) cast = cast.replace("Q", "");
+  if (m.from === 63 || m.to === 63) cast = cast.replace("k", "");
+  if (m.from === 56 || m.to === 56) cast = cast.replace("q", "");
+  return {
+    board: b, turn: white ? "b" : "w",
+    castling: cast, ep: m.flag === "d" ? (m.from + m.to) / 2 : -1
+  };
+}
+
+function legalMoves(st) {
+  var out = [], ms = genPseudo(st), white = st.turn === "w";
+  for (var i = 0; i < ms.length; i++) {
+    var ns = makeMove(st, ms[i]);
+    var ks = kingSq(ns.board, white);
+    if (ks < 0) continue; // 己方王被吃(非法局面防护)
+    if (!isAttacked(ns.board, ks, !white)) out.push(ms[i]);
+  }
+  return out;
+}
+
+// 在 legalMoves 中按 key 精确匹配（含升变/特殊 flag）
+function findMove(st, key) {
+  var ms = legalMoves(st);
+  for (var i = 0; i < ms.length; i++) if (moveKey(ms[i]) === key) return ms[i];
+  return null;
+}
+
+function isCheckmate(st) { return inCheck(st) && legalMoves(st).length === 0; }
+function isStalemate(st) { return !inCheck(st) && legalMoves(st).length === 0; }
+
+var CP = {
+  parseFEN: parseFEN, toFEN: toFEN, sqName: sqName, parseSq: parseSq, parseMove: parseMove, moveKey: moveKey,
+  isAttacked: isAttacked, kingSq: kingSq, inCheck: inCheck, genPseudo: genPseudo, makeMove: makeMove,
+  legalMoves: legalMoves, findMove: findMove, isCheckmate: isCheckmate, isStalemate: isStalemate
+};
+if (typeof module !== "undefined") module.exports = CP;
+if (typeof window !== "undefined") window.CP = CP;
+
+// 100 道将杀谜题 (f=测试局 l=1..3 t=主题 tree=应答树)
+var PUZZLES=[{"f":"8/1P6/5QN1/8/8/8/4P1k1/R3K2R w KQ -","l":1,"t":"Castling","tree":{"w":["f6f3"],"d":[["f6f3",[]]]}},{"f":"2Q5/8/8/8/2B5/8/6k1/R3K2R w KQ -","l":1,"t":"Castling","tree":{"w":["c8h3"],"d":[["c8h3",[]]]}},{"f":"k7/8/1K4N1/8/3R4/8/8/8 w - -","l":1,"t":"Rook & Knight","tree":{"w":["d4d8"],"d":[["d4d8",[]]]}},{"f":"8/8/8/4R3/2K5/k7/8/6Q1 w - -","l":1,"t":"Queen & Rook","tree":{"w":["g1a1"],"d":[["g1a1",[]]]}},{"f":"8/7K/8/2Q5/8/7N/8/5k2 w - -","l":1,"t":"Queen & Knight","tree":{"w":["c5f2"],"d":[["c5f2",[]]]}},{"f":"5k2/7R/2n5/7Q/8/8/8/6K1 w - -","l":1,"t":"Queen & Rook","tree":{"w":["h5f7"],"d":[["h5f7",[]]]}},{"f":"8/8/8/k3K3/8/8/3p1Q2/1R6 w - -","l":1,"t":"Queen & Rook","tree":{"w":["f2a7"],"d":[["f2a7",[]]]}},{"f":"8/1K6/7R/8/8/5p2/3R4/5k2 w - -","l":1,"t":"Two Rooks","tree":{"w":["h6h1"],"d":[["h6h1",[]]]}},{"f":"8/8/7k/6R1/8/4K3/2Qp4/8 w - -","l":1,"t":"Queen & Rook","tree":{"w":["c2g6"],"d":[["c2g6",[]]]}},{"f":"7k/8/8/2p1K3/8/3Q4/8/6R1 w - -","l":1,"t":"Queen & Rook","tree":{"w":["d3h3"],"d":[["d3h3",[]]]}},{"f":"8/8/8/8/8/3RK3/4R3/k7 w - -","l":1,"t":"Two Rooks","tree":{"w":["d3d1"],"d":[["d3d1",[]]]}},{"f":"8/8/Q7/8/2N5/8/5K1k/8 w - -","l":1,"t":"Queen & Knight","tree":{"w":["a6h6"],"d":[["a6h6",[]]]}},{"f":"4k3/8/4K3/N7/8/1R6/8/3p4 w - -","l":1,"t":"Rook & Knight","tree":{"w":["b3b8"],"d":[["b3b8",[]]]}},{"f":"k7/8/1K6/8/8/8/8/4NR2 w - -","l":1,"t":"Rook & Knight","tree":{"w":["f1f8"],"d":[["f1f8",[]]]}},{"f":"7k/8/1K6/8/8/8/1p6/1B3Q2 w - -","l":1,"t":"Queen & Bishop","tree":{"w":["f1f8"],"d":[["f1f8",[]]]}},{"f":"k7/6Q1/8/8/8/n7/3K1B2/8 w - -","l":1,"t":"Queen & Bishop","tree":{"w":["g7a7"],"d":[["g7a7",[]]]}},{"f":"8/3K4/8/8/6R1/8/4Q3/7k w - -","l":1,"t":"Queen & Rook","tree":{"w":["e2g2"],"d":[["e2g2",[]]]}},{"f":"4B1Q1/8/8/8/8/k1K5/8/8 w - -","l":1,"t":"Queen & Bishop","tree":{"w":["g8b3"],"d":[["g8b3",[]]]}},{"f":"8/3R4/8/7n/8/3KQ3/8/3k4 w - -","l":1,"t":"Queen & Rook","tree":{"w":["d3c3","e3g1","e3d2"],"d":[["d3c3",[]],["e3g1",[]],["e3d2",[]]]}},{"f":"8/8/B5Q1/8/1p5K/8/5k2/8 w - -","l":1,"t":"Queen & Bishop","tree":{"w":["g6g3"],"d":[["g6g3",[]]]}},{"f":"8/8/8/8/6p1/7k/Q7/6K1 w - -","l":1,"t":"Queen Mate","tree":{"w":["a2h2"],"d":[["a2h2",[]]]}},{"f":"5k2/8/5K2/8/8/2NQ4/8/8 w - -","l":1,"t":"Queen & Knight","tree":{"w":["d3d8"],"d":[["d3d8",[]]]}},{"f":"2k5/8/2K5/2Q5/8/8/7p/7P w - -","l":1,"t":"Queen Mate","tree":{"w":["c5f8"],"d":[["c5f8",[]]]}},{"f":"K7/8/8/8/5Q2/8/8/2Bk4 w - -","l":1,"t":"Queen & Bishop","tree":{"w":["f4d2"],"d":[["f4d2",[]]]}},{"f":"2p5/8/k7/P2Q4/2K3p1/8/8/8 w - -","l":1,"t":"Queen & Pawn","tree":{"w":["d5a8"],"d":[["d5a8",[]]]}},{"f":"8/8/1R6/8/8/k7/6Q1/2K5 w - -","l":1,"t":"Queen & Rook","tree":{"w":["g2a8"],"d":[["g2a8",[]]]}},{"f":"4k3/8/4K3/7N/1R5n/8/8/8 w - -","l":1,"t":"Rook & Knight","tree":{"w":["b4b8"],"d":[["b4b8",[]]]}},{"f":"k7/8/8/1N6/8/2Q2K2/8/8 w - -","l":1,"t":"Queen & Knight","tree":{"w":["c3c8"],"d":[["c3c8",[]]]}},{"f":"k7/2K5/8/8/8/8/4B3/6Q1 w - -","l":1,"t":"Queen & Bishop","tree":{"w":["g1a1","e2f3"],"d":[["g1a1",[]],["e2f3",[]]]}},{"f":"8/8/5R2/8/3R4/8/k1K5/6p1 w - -","l":1,"t":"Two Rooks","tree":{"w":["d4a4","f6a6"],"d":[["d4a4",[]],["f6a6",[]]]}},{"f":"8/8/8/R7/6P1/2K5/8/2k2p2 w - -","l":1,"t":"Rook & Pawn","tree":{"w":["a5a1"],"d":[["a5a1",[]]]}},{"f":"K7/3p4/8/6R1/8/1p6/7R/1k6 w - -","l":1,"t":"Two Rooks","tree":{"w":["g5g1"],"d":[["g5g1",[]]]}},{"f":"8/8/8/5K2/7k/8/2Q5/7n w - -","l":1,"t":"Queen Mate","tree":{"w":["c2h2"],"d":[["c2h2",[]]]}},{"f":"8/6N1/4R3/6p1/8/8/8/5K1k w - -","l":1,"t":"Rook & Knight","tree":{"w":["e6h6"],"d":[["e6h6",[]]]}},{"f":"8/8/7k/5K2/5R2/8/8/6Q1 w - -","l":1,"t":"Queen & Rook","tree":{"w":["g1g6","f4h4"],"d":[["g1g6",[]],["f4h4",[]]]}},{"f":"8/3Q4/8/1p4K1/8/6k1/7R/8 w - -","l":1,"t":"Queen & Rook","tree":{"w":["d7h3"],"d":[["d7h3",[]]]}},{"f":"3p4/6R1/8/8/1K6/8/k7/7R w - -","l":1,"t":"Two Rooks","tree":{"w":["g7g2"],"d":[["g7g2",[]]]}},{"f":"8/3R4/6Q1/8/5p2/8/4k1K1/8 w - -","l":1,"t":"Queen & Rook","tree":{"w":["g6e6","g6e8","g6e4"],"d":[["g6e6",[]],["g6e8",[]],["g6e4",[]]]}},{"f":"k7/2KP4/8/8/8/2Q5/8/8 w - -","l":1,"t":"Queen & Pawn","tree":{"w":["c3a3","c3a5","c3a1"],"d":[["c3a3",[]],["c3a5",[]],["c3a1",[]]]}},{"f":"8/6P1/8/7Q/8/5K2/8/5k2 w - -","l":1,"t":"Queen & Pawn","tree":{"w":["h5h1"],"d":[["h5h1",[]]]}},{"f":"8/k7/3K3R/8/8/7R/8/8 w - -","l":2,"t":"Two Rooks","tree":{"w":["d6c7"],"d":[["d6c7",[["a7a8",{"w":["h3a3","h6a6"],"d":[["h3a3",[]],["h6a6",[]]]}]]]]}},{"f":"6k1/7p/R7/8/8/8/8/1R4K1 w - -","l":2,"t":"Rook Pair & Pawn","tree":{"w":["b1b7"],"d":[["b1b7",[["h7h6",{"w":["a6a8"],"d":[["a6a8",[]]]}],["h7h5",{"w":["a6a8"],"d":[["a6a8",[]]]}],["g8h8",{"w":["a6a8"],"d":[["a6a8",[]]]}],["g8f8",{"w":["a6a8"],"d":[["a6a8",[]]]}]]]]}},{"f":"8/7p/1R6/7k/8/Q7/8/3K4 w - -","l":2,"t":"Queen & Rook","tree":{"w":["a3g3"],"d":[["a3g3",[["h7h6",{"w":["b6b5"],"d":[["b6b5",[]]]}]]]]}},{"f":"8/8/5K2/7k/Rp6/4N3/8/7p w - -","l":2,"t":"Rook & Knight","tree":{"w":["a4b4"],"d":[["a4b4",[["h5h6",{"w":["b4h4"],"d":[["b4h4",[]]]}]]]]}},{"f":"N7/R7/5K1k/8/8/8/8/8 w - -","l":2,"t":"Rook & Knight","tree":{"w":["f6f5"],"d":[["f6f5",[["h6h5",{"w":["a7h7"],"d":[["a7h7",[]]]}]]]]}},{"f":"3R4/8/7K/8/2p5/2R5/6k1/8 w - -","l":2,"t":"Two Rooks","tree":{"w":["d8d2"],"d":[["d8d2",[["g2g1",{"w":["c3c1"],"d":[["c3c1",[]]]}],["g2h1",{"w":["c3c1"],"d":[["c3c1",[]]]}],["g2f1",{"w":["c3c1"],"d":[["c3c1",[]]]}]]]]}},{"f":"8/3R4/8/8/2P5/6K1/k7/2R5 w - -","l":2,"t":"Rook Pair & Pawn","tree":{"w":["d7b7"],"d":[["d7b7",[["a2a3",{"w":["c1a1"],"d":[["c1a1",[]]]}]]]]}},{"f":"1k4K1/8/8/8/8/R6R/8/8 w - -","l":2,"t":"Two Rooks","tree":{"w":["h3h7"],"d":[["h3h7",[["b8c8",{"w":["a3a8"],"d":[["a3a8",[]]]}]]]]}},{"f":"k7/8/8/2K5/7Q/2N5/8/8 w - -","l":2,"t":"Queen & Knight","tree":{"w":["c5b6"],"d":[["c5b6",[["a8b8",{"w":["h4h8","h4d8"],"d":[["h4h8",[]],["h4d8",[]]]}]]]]}},{"f":"8/2B5/8/8/k2K4/8/8/6Q1 w - -","l":2,"t":"Queen & Bishop","tree":{"w":["d4c4"],"d":[["d4c4",[["a4a3",{"w":["g1a1"],"d":[["g1a1",[]]]}]]]]}},{"f":"8/7R/1KQ5/8/8/k7/8/8 w - -","l":2,"t":"Queen & Rook","tree":{"w":["c6b5"],"d":[["c6b5",[["a3a2",{"w":["h7a7"],"d":[["h7a7",[]]]}]]]]}},{"f":"3K4/4R2R/8/8/8/8/8/1k4P1 w - -","l":2,"t":"Rook Pair & Pawn","tree":{"w":["h7h2"],"d":[["h7h2",[["b1c1",{"w":["e7e1"],"d":[["e7e1",[]]]}],["b1a1",{"w":["e7e1"],"d":[["e7e1",[]]]}]]]]}},{"f":"K3R3/8/8/6k1/8/8/5R2/8 w - -","l":2,"t":"Two Rooks","tree":{"w":["e8g8"],"d":[["e8g8",[["g5h5",{"w":["f2h2"],"d":[["f2h2",[]]]}],["g5h6",{"w":["f2h2"],"d":[["f2h2",[]]]}],["g5h4",{"w":["f2h2"],"d":[["f2h2",[]]]}]]]]}},{"f":"8/8/1Q6/8/2p4k/8/7K/7R w - -","l":2,"t":"Queen & Rook","tree":{"w":["b6g6"],"d":[["b6g6",[["c4c3",{"w":["h2g2","h2g1"],"d":[["h2g2",[]],["h2g1",[]]]}]]]]}},{"f":"5R2/8/7k/5K2/8/5R1p/8/8 w - -","l":2,"t":"Two Rooks","tree":{"w":["f8f7"],"d":[["f8f7",[["h3h2",{"w":["f3h3"],"d":[["f3h3",[]]]}],["h6h5",{"w":["f3h3","f7h7"],"d":[["f3h3",[]],["f7h7",[]]]}]]]]}},{"f":"8/k7/2Q5/8/8/3NK3/8/8 w - -","l":2,"t":"Queen & Knight","tree":{"w":["d3c5"],"d":[["d3c5",[["a7b8",{"w":["c6b7"],"d":[["c6b7",[]]]}]]]]}},{"f":"8/5Q2/1K6/8/8/5R2/8/2k5 w - -","l":2,"t":"Queen & Rook","tree":{"w":["f7a2"],"d":[["f7a2",[["c1d1",{"w":["f3f1"],"d":[["f3f1",[]]]}]]]]}},{"f":"1k6/8/7p/N7/5K2/8/2Q5/8 w - -","l":2,"t":"Queen & Knight","tree":{"w":["c2c6"],"d":[["c2c6",[["h6h5",{"w":["c6b7"],"d":[["c6b7",[]]]}],["b8a7",{"w":["c6b7"],"d":[["c6b7",[]]]}]]]]}},{"f":"8/R7/7k/8/8/2K5/2R5/8 w - -","l":2,"t":"Two Rooks","tree":{"w":["c2g2"],"d":[["c2g2",[["h6h5",{"w":["a7h7"],"d":[["a7h7",[]]]}]]]]}},{"f":"8/8/8/1p2k3/6Q1/4K2R/8/8 w - -","l":2,"t":"Queen & Rook","tree":{"w":["h3h6"],"d":[["h3h6",[["b5b4",{"w":["g4g5","g4e4","g4h5","g4e6"],"d":[["g4g5",[]],["g4e4",[]],["g4h5",[]],["g4e6",[]]]}],["e5d5",{"w":["g4d4"],"d":[["g4d4",[]]]}]]]]}},{"f":"k2K4/6N1/8/8/5Q2/8/8/8 w - -","l":2,"t":"Queen & Knight","tree":{"w":["d8c7"],"d":[["d8c7",[["a8a7",{"w":["f4a4"],"d":[["f4a4",[]]]}]]]]}},{"f":"2R5/8/8/8/8/R7/2K1k3/8 w - -","l":2,"t":"Two Rooks","tree":{"w":["c8f8"],"d":[["c8f8",[["e2e1",{"w":["a3e3"],"d":[["a3e3",[]]]}]]]]}},{"f":"3K4/8/4k3/5R2/8/8/P6R/8 w - -","l":2,"t":"Rook Pair & Pawn","tree":{"w":["h2h5"],"d":[["h2h5",[["e6d6",{"w":["f5f6","h5h6"],"d":[["f5f6",[]],["h5h6",[]]]}]]]]}},{"f":"8/8/8/p2PK3/7k/8/8/6Q1 w - -","l":2,"t":"Queen & Pawn","tree":{"w":["e5f4"],"d":[["e5f4",[["h4h5",{"w":["g1g5"],"d":[["g1g5",[]]]}],["h4h3",{"w":["g1g3","g1h1"],"d":[["g1g3",[]],["g1h1",[]]]}],["a5a4",{"w":["g1g4","g1h1","g1h2"],"d":[["g1g4",[]],["g1h1",[]],["g1h2",[]]]}]]]]}},{"f":"6k1/8/8/7K/4R3/1R1p4/5P2/8 w - -","l":2,"t":"Rook Pair & Pawn","tree":{"w":["h5g6"],"d":[["h5g6",[["d3d2",{"w":["b3b8","e4e8"],"d":[["b3b8",[]],["e4e8",[]]]}],["g8h8",{"w":["b3b8","e4e8"],"d":[["b3b8",[]],["e4e8",[]]]}],["g8f8",{"w":["b3b8"],"d":[["b3b8",[]]]}]]]]}},{"f":"6p1/6P1/8/8/8/3K3R/k7/8 w - -","l":2,"t":"Rook & Pawn","tree":{"w":["d3c2"],"d":[["d3c2",[["a2a1",{"w":["h3a3"],"d":[["h3a3",[]]]}]]]]}},{"f":"8/5p2/8/5K2/1Q6/5R2/8/3k4 w - -","l":2,"t":"Queen & Rook","tree":{"w":["f3f2"],"d":[["f3f2",[["d1c1",{"w":["b4e1"],"d":[["b4e1",[]]]}],["f7f6",{"w":["b4b1","b4d2"],"d":[["b4b1",[]],["b4d2",[]]]}]]]]}},{"f":"4Q3/8/8/8/3K4/3B4/8/k7 w - -","l":2,"t":"Queen & Bishop","tree":{"w":["d4c3"],"d":[["d4c3",[["a1a2",{"w":["e8a8","e8a4"],"d":[["e8a8",[]],["e8a4",[]]]}]]]]}},{"f":"8/k7/6B1/8/3K4/8/2Q5/8 w - -","l":2,"t":"Queen & Bishop","tree":{"w":["c2c7"],"d":[["c2c7",[["a7a8",{"w":["g6e4"],"d":[["g6e4",[]]]}],["a7a6",{"w":["g6d3"],"d":[["g6d3",[]]]}]]]]}},{"f":"8/P7/2k5/8/3Q4/K7/8/8 w - -","l":2,"t":"Queen & Pawn","tree":{"w":["a7a8q"],"d":[["a7a8q",[["c6c7",{"w":["d4d8"],"d":[["d4d8",[]]]}],["c6b5",{"w":["d4b4","a8a4"],"d":[["d4b4",[]],["a8a4",[]]]}]]]]}},{"f":"3P4/8/8/8/8/8/1Q5p/4K1k1 w - -","l":2,"t":"Queen & Pawn","tree":{"w":["b2f2"],"d":[["b2f2",[["g1h1",{"w":["f2f1"],"d":[["f2f1",[]]]}]]]]}},{"f":"8/8/5R2/7k/7P/4K3/8/8 w - -","l":2,"t":"Rook & Pawn","tree":{"w":["e3f4"],"d":[["e3f4",[["h5h4",{"w":["f6h6"],"d":[["f6h6",[]]]}]]]]}},{"f":"5R2/8/8/3Q4/6k1/8/8/2K5 w - -","l":2,"t":"Queen & Rook","tree":{"w":["d5g2"],"d":[["d5g2",[["g4h4",{"w":["f8h8"],"d":[["f8h8",[]]]}],["g4h5",{"w":["f8h8"],"d":[["f8h8",[]]]}]]]]}},{"f":"k7/5B2/8/4Q3/5p2/8/1K6/8 w - -","l":2,"t":"Queen & Bishop","tree":{"w":["e5c7"],"d":[["e5c7",[["f4f3",{"w":["f7d5"],"d":[["f7d5",[]]]}]]]]}},{"f":"2RR4/8/1K6/8/1k6/8/8/2P5 w - -","l":2,"t":"Rook Pair & Pawn","tree":{"w":["d8d3"],"d":[["d8d3",[["b4a4",{"w":["c8c4"],"d":[["c8c4",[]]]}]]]]}},{"f":"R7/8/8/8/8/R7/6K1/1k6 w - -","l":3,"t":"Two Rooks","tree":{"w":["a3a2"],"d":[["a3a2",[["b1c1",{"w":["a8b8"],"d":[["a8b8",[["c1d1",{"w":["b8b1"],"d":[["b8b1",[]]]}]]]]}]]]]}},{"f":"8/2R5/PK6/8/1R6/p7/8/5k2 w - -","l":3,"t":"Rook Pair & Pawn","tree":{"w":["c7c2"],"d":[["c7c2",[["f1g1",{"w":["c2a2","b4b1","b4d4"],"d":[["c2a2",[["g1h1",{"w":["b4b1"],"d":[["b4b1",[]]]}],["g1f1",{"w":["b4b1"],"d":[["b4b1",[]]]}]]],["b4b1",[]],["b4d4",[["g1h1",{"w":["d4d1"],"d":[["d4d1",[]]]}],["g1f1",{"w":["d4d1"],"d":[["d4d1",[]]]}],["a3a2",{"w":["d4d1"],"d":[["d4d1",[]]]}]]]]}],["f1e1",{"w":["c2a2","b4b1"],"d":[["c2a2",[["e1f1",{"w":["b4b1"],"d":[["b4b1",[]]]}],["e1d1",{"w":["b4b1"],"d":[["b4b1",[]]]}]]],["b4b1",[]]]}],["a3a2",{"w":["c2a2"],"d":[["c2a2",[["f1g1",{"w":["b4b1"],"d":[["b4b1",[]]]}],["f1e1",{"w":["b4b1"],"d":[["b4b1",[]]]}]]]]}]]]]}},{"f":"8/8/7Q/8/8/1B3k1K/8/8 w - -","l":3,"t":"Queen & Bishop","tree":{"w":["h6d2"],"d":[["h6d2",[["f3e4",{"w":["h3g4"],"d":[["h3g4",[["e4e5",{"w":["d2f4"],"d":[["d2f4",[]]]}]]]]}]]]]}},{"f":"3Q4/8/7R/8/5K2/2k5/8/8 w - -","l":3,"t":"Queen & Rook","tree":{"w":["h6b6"],"d":[["h6b6",[["c3c4",{"w":["f4e4","f4e3"],"d":[["f4e4",[["c4c5",{"w":["d8d4","d8c7"],"d":[["d8d4",[]],["d8c7",[]]]}],["c4c3",{"w":["d8d3"],"d":[["d8d3",[]]]}]]],["f4e3",[["c4c5",{"w":["d8d4"],"d":[["d8d4",[]]]}],["c4c3",{"w":["d8d3","d8c8","d8c7"],"d":[["d8d3",[]],["d8c8",[]],["d8c7",[]]]}]]]]}],["c3c2",{"w":["f4e3"],"d":[["f4e3",[["c2c3",{"w":["d8d3","d8c8","d8c7"],"d":[["d8d3",[]],["d8c8",[]],["d8c7",[]]]}],["c2c1",{"w":["d8d2"],"d":[["d8d2",[]]]}]]]]}]]]]}},{"f":"8/4P3/k7/8/8/7K/6R1/2p5 w - -","l":3,"t":"Rook & Pawn","tree":{"w":["g2b2"],"d":[["g2b2",[["a6a7",{"w":["e7e8q","e7e8r"],"d":[["e7e8q",[["a7a6",{"w":["e8a8","e8a4"],"d":[["e8a8",[]],["e8a4",[]]]}]]],["e7e8r",[["a7a6",{"w":["e8a8"],"d":[["e8a8",[]]]}]]]]}],["a6a5",{"w":["e7e8q","e7e8r"],"d":[["e7e8q",[["a5a6",{"w":["e8a8","e8a4"],"d":[["e8a8",[]],["e8a4",[]]]}]]],["e7e8r",[["a5a6",{"w":["e8a8"],"d":[["e8a8",[]]]}],["a5a4",{"w":["e8a8"],"d":[["e8a8",[]]]}]]]]}]]]]}},{"f":"1k3K2/6P1/8/3pR3/8/8/8/8 w - -","l":3,"t":"Rook & Pawn","tree":{"w":["e5e7"],"d":[["e5e7",[["d5d4",{"w":["g7g8q","g7g8r","f8f7"],"d":[["g7g8q",[["d4d3",{"w":["f8f7","f8g7"],"d":[["f8f7",[]],["f8g7",[]]]}],["b8c8",{"w":["f8f7","f8g7"],"d":[["f8f7",[]],["f8g7",[]]]}],["b8a8",{"w":["f8f7","f8g7"],"d":[["f8f7",[]],["f8g7",[]]]}]]],["g7g8r",[["d4d3",{"w":["f8f7","f8g7"],"d":[["f8f7",[]],["f8g7",[]]]}],["b8c8",{"w":["f8f7","f8g7"],"d":[["f8f7",[]],["f8g7",[]]]}],["b8a8",{"w":["f8f7","f8g7"],"d":[["f8f7",[]],["f8g7",[]]]}]]],["f8f7",[["d4d3",{"w":["g7g8q","g7g8r"],"d":[["g7g8q",[]],["g7g8r",[]]]}],["b8c8",{"w":["g7g8q","g7g8r"],"d":[["g7g8q",[]],["g7g8r",[]]]}],["b8a8",{"w":["g7g8q","g7g8r"],"d":[["g7g8q",[]],["g7g8r",[]]]}]]]]}],["b8c8",{"w":["g7g8q","g7g8r","f8f7"],"d":[["g7g8q",[["d5d4",{"w":["f8f7","f8g7"],"d":[["f8f7",[]],["f8g7",[]]]}],["c8d8",{"w":["f8f7"],"d":[["f8f7",[]]]}],["c8b8",{"w":["f8f7","f8g7"],"d":[["f8f7",[]],["f8g7",[]]]}]]],["g7g8r",[["d5d4",{"w":["f8f7","f8g7"],"d":[["f8f7",[]],["f8g7",[]]]}],["c8d8",{"w":["f8f7"],"d":[["f8f7",[]]]}],["c8b8",{"w":["f8f7","f8g7"],"d":[["f8f7",[]],["f8g7",[]]]}]]],["f8f7",[["d5d4",{"w":["g7g8q","g7g8r"],"d":[["g7g8q",[]],["g7g8r",[]]]}],["c8d8",{"w":["g7g8q","g7g8r"],"d":[["g7g8q",[]],["g7g8r",[]]]}],["c8b8",{"w":["g7g8q","g7g8r"],"d":[["g7g8q",[]],["g7g8r",[]]]}]]]]}],["b8a8",{"w":["g7g8q","g7g8r","f8f7"],"d":[["g7g8q",[["d5d4",{"w":["f8f7","f8g7"],"d":[["f8f7",[]],["f8g7",[]]]}],["a8b8",{"w":["f8f7","f8g7"],"d":[["f8f7",[]],["f8g7",[]]]}]]],["g7g8r",[["d5d4",{"w":["f8f7","f8g7"],"d":[["f8f7",[]],["f8g7",[]]]}],["a8b8",{"w":["f8f7","f8g7"],"d":[["f8f7",[]],["f8g7",[]]]}]]],["f8f7",[["d5d4",{"w":["g7g8q","g7g8r"],"d":[["g7g8q",[]],["g7g8r",[]]]}],["a8b8",{"w":["g7g8q","g7g8r"],"d":[["g7g8q",[]],["g7g8r",[]]]}]]]]}]]]]}},{"f":"8/8/8/8/2B5/4R3/K1k5/8 w - -","l":3,"t":"Rook & Bishop","tree":{"w":["e3d3"],"d":[["e3d3",[["c2c1",{"w":["a2b3"],"d":[["a2b3",[["c1b1",{"w":["d3d1"],"d":[["d3d1",[]]]}]]]]}]]]]}},{"f":"7p/5BQ1/8/8/8/K7/8/3k4 w - -","l":3,"t":"Queen & Bishop","tree":{"w":["g7g2"],"d":[["g7g2",[["d1e1",{"w":["f7h5"],"d":[["f7h5",[["h8h7",{"w":["g2e2"],"d":[["g2e2",[]]]}]]]]}],["d1c1",{"w":["f7h5","f7b3"],"d":[["f7h5",[["c1b1",{"w":["g2b2"],"d":[["g2b2",[]]]}],["h8h7",{"w":["g2b2"],"d":[["g2b2",[]]]}]]],["f7b3",[["c1b1",{"w":["g2g1","g2b2","g2h1","g2f1"],"d":[["g2g1",[]],["g2b2",[]],["g2h1",[]],["g2f1",[]]]}],["h8h7",{"w":["g2c2","g2b2"],"d":[["g2c2",[]],["g2b2",[]]]}]]]]}],["h8h7",{"w":["f7h5"],"d":[["f7h5",[["d1e1",{"w":["g2e2"],"d":[["g2e2",[]]]}],["d1c1",{"w":["g2b2"],"d":[["g2b2",[]]]}]]]]}]]]]}},{"f":"8/2P2R2/1k6/8/8/K7/8/8 w - -","l":3,"t":"Rook & Pawn","tree":{"w":["c7c8q"],"d":[["c7c8q",[["b6b5",{"w":["f7f6","f7b7"],"d":[["f7f6",[["b5a5",{"w":["c8c5","c8f5","c8a6"],"d":[["c8c5",[]],["c8f5",[]],["c8a6",[]]]}]]],["f7b7",[["b5a5",{"w":["c8a8"],"d":[["c8a8",[]]]}],["b5a6",{"w":["c8a8"],"d":[["c8a8",[]]]}]]]]}],["b6a5",{"w":["f7b7","c8c5","c8b8","c8e6"],"d":[["f7b7",[["a5a6",{"w":["c8a8"],"d":[["c8a8",[]]]}]]],["c8c5",[["a5a6",{"w":["f7a7"],"d":[["f7a7",[]]]}]]],["c8b8",[["a5a6",{"w":["f7a7"],"d":[["f7a7",[]]]}]]],["c8e6",[["a5b5",{"w":["f7f5"],"d":[["f7f5",[]]]}]]]]}]]]]}},{"f":"2K5/8/3B4/2Q5/1p6/8/8/k7 w - -","l":3,"t":"Queen & Bishop","tree":{"w":["c5c2"],"d":[["c5c2",[["b4b3",{"w":["d6e5"],"d":[["d6e5",[["b3b2",{"w":["c2b2"],"d":[["c2b2",[]]]}]]]]}]]]]}},{"f":"6R1/8/1k6/5PK1/8/1p6/8/2R5 w - -","l":3,"t":"Rook Pair & Pawn","tree":{"w":["g8b8"],"d":[["g8b8",[["b6a6",{"w":["c1a1","b8b3"],"d":[["c1a1",[]],["b8b3",[["a6a7",{"w":["c1a1"],"d":[["c1a1",[]]]}],["a6a5",{"w":["c1a1"],"d":[["c1a1",[]]]}]]]]}],["b6a7",{"w":["b8b3"],"d":[["b8b3",[["a7a8",{"w":["c1a1"],"d":[["c1a1",[]]]}],["a7a6",{"w":["c1a1"],"d":[["c1a1",[]]]}]]]]}],["b6a5",{"w":["c1a1"],"d":[["c1a1",[]]]}]]]]}},{"f":"3R4/8/8/8/8/5p2/k4N2/3K4 w - -","l":3,"t":"Rook & Knight","tree":{"w":["d1c2"],"d":[["d1c2",[["a2a3",{"w":["d8d4"],"d":[["d8d4",[["a3a2",{"w":["d4a4"],"d":[["d4a4",[]]]}]]]]}],["a2a1",{"w":["c2b3","f2h3","f2g4","f2e4","f2d3","f2d1","f2h1","d8d7","d8d6","d8d5","d8d4","d8e8","d8f8","d8g8","d8h8","d8c8","d8b8","d8a8"],"d":[["c2b3",[["a1b1",{"w":["d8d1"],"d":[["d8d1",[]]]}]]],["f2h3",[["a1a2",{"w":["d8a8"],"d":[["d8a8",[]]]}],["f3f2",{"w":["d8a8"],"d":[["d8a8",[]]]}]]],["f2g4",[["a1a2",{"w":["d8a8"],"d":[["d8a8",[]]]}],["f3f2",{"w":["d8a8"],"d":[["d8a8",[]]]}]]],["f2e4",[["a1a2",{"w":["d8a8"],"d":[["d8a8",[]]]}],["f3f2",{"w":["d8a8"],"d":[["d8a8",[]]]}]]],["f2d3",[["a1a2",{"w":["d8a8"],"d":[["d8a8",[]]]}],["f3f2",{"w":["d8a8"],"d":[["d8a8",[]]]}]]],["f2d1",[["a1a2",{"w":["d8a8"],"d":[["d8a8",[]]]}],["f3f2",{"w":["d8a8"],"d":[["d8a8",[]]]}]]],["f2h1",[["a1a2",{"w":["d8a8"],"d":[["d8a8",[]]]}],["f3f2",{"w":["d8a8"],"d":[["d8a8",[]]]}]]],["d8d7",[["a1a2",{"w":["d7a7"],"d":[["d7a7",[]]]}]]],["d8d6",[["a1a2",{"w":["d6a6"],"d":[["d6a6",[]]]}]]],["d8d5",[["a1a2",{"w":["d5a5"],"d":[["d5a5",[]]]}]]],["d8d4",[["a1a2",{"w":["d4a4"],"d":[["d4a4",[]]]}]]],["d8e8",[["a1a2",{"w":["e8a8"],"d":[["e8a8",[]]]}]]],["d8f8",[["a1a2",{"w":["f8a8"],"d":[["f8a8",[]]]}]]],["d8g8",[["a1a2",{"w":["g8a8"],"d":[["g8a8",[]]]}]]],["d8h8",[["a1a2",{"w":["h8a8"],"d":[["h8a8",[]]]}]]],["d8c8",[["a1a2",{"w":["c8a8"],"d":[["c8a8",[]]]}]]],["d8b8",[["a1a2",{"w":["b8a8"],"d":[["b8a8",[]]]}]]],["d8a8",[]]]}]]]]}},{"f":"8/5k2/6RR/7K/8/8/8/8 w - -","l":3,"t":"Two Rooks","tree":{"w":["h6h7"],"d":[["h6h7",[["f7f8",{"w":["h5h6","h5h4","h5g5","h5g4","g6g7","g6g5","g6g4","g6g3","g6g2","g6g1","h7c7","h7b7","h7a7"],"d":[["h5h6",[["f8e8",{"w":["g6g8"],"d":[["g6g8",[]]]}]]],["h5h4",[["f8e8",{"w":["g6g8"],"d":[["g6g8",[]]]}]]],["h5g5",[["f8e8",{"w":["g6g8"],"d":[["g6g8",[]]]}]]],["h5g4",[["f8e8",{"w":["g6g8"],"d":[["g6g8",[]]]}]]],["g6g7",[["f8e8",{"w":["g7g8","h7h8"],"d":[["g7g8",[]],["h7h8",[]]]}]]],["g6g5",[["f8e8",{"w":["g5g8"],"d":[["g5g8",[]]]}]]],["g6g4",[["f8e8",{"w":["g4g8"],"d":[["g4g8",[]]]}]]],["g6g3",[["f8e8",{"w":["g3g8"],"d":[["g3g8",[]]]}]]],["g6g2",[["f8e8",{"w":["g2g8"],"d":[["g2g8",[]]]}]]],["g6g1",[["f8e8",{"w":["g1g8"],"d":[["g1g8",[]]]}]]],["h7c7",[["f8e8",{"w":["g6g8"],"d":[["g6g8",[]]]}]]],["h7b7",[["f8e8",{"w":["g6g8"],"d":[["g6g8",[]]]}]]],["h7a7",[["f8e8",{"w":["g6g8"],"d":[["g6g8",[]]]}]]]]}],["f7e8",{"w":["g6g8","g6f6","g6d6","g6b6","g6a6"],"d":[["g6g8",[]],["g6f6",[["e8d8",{"w":["f6f8"],"d":[["f6f8",[]]]}]]],["g6d6",[["e8f8",{"w":["d6d8"],"d":[["d6d8",[]]]}]]],["g6b6",[["e8f8",{"w":["b6b8"],"d":[["b6b8",[]]]}],["e8d8",{"w":["b6b8"],"d":[["b6b8",[]]]}]]],["g6a6",[["e8f8",{"w":["a6a8"],"d":[["a6a8",[]]]}],["e8d8",{"w":["a6a8"],"d":[["a6a8",[]]]}]]]]}]]]]}},{"f":"8/p7/2k5/8/2K5/8/1P6/6RR w - -","l":3,"t":"Two Rooks","tree":{"w":["g1g6"],"d":[["g1g6",[["c6c7",{"w":["h1h7"],"d":[["h1h7",[["c7c8",{"w":["g6g8"],"d":[["g6g8",[]]]}],["c7d8",{"w":["g6g8"],"d":[["g6g8",[]]]}],["c7b8",{"w":["g6g8"],"d":[["g6g8",[]]]}]]]]}],["c6d7",{"w":["h1h7"],"d":[["h1h7",[["d7d8",{"w":["g6g8"],"d":[["g6g8",[]]]}],["d7e8",{"w":["g6g8"],"d":[["g6g8",[]]]}],["d7c8",{"w":["g6g8"],"d":[["g6g8",[]]]}]]]]}],["c6b7",{"w":["h1h7"],"d":[["h1h7",[["b7b8",{"w":["g6g8"],"d":[["g6g8",[]]]}],["b7c8",{"w":["g6g8"],"d":[["g6g8",[]]]}],["b7a8",{"w":["g6g8"],"d":[["g6g8",[]]]}]]]]}]]]]}},{"f":"8/5R2/4Q3/8/8/3k4/8/6K1 w - -","l":3,"t":"Queen & Rook","tree":{"w":["f7c7"],"d":[["f7c7",[["d3d4",{"w":["g1f2"],"d":[["g1f2",[["d4d3",{"w":["e6e3","e6d5"],"d":[["e6e3",[]],["e6d5",[]]]}]]]]}],["d3d2",{"w":["g1f2"],"d":[["g1f2",[["d2d3",{"w":["e6e3","e6d5"],"d":[["e6e3",[]],["e6d5",[]]]}],["d2d1",{"w":["e6e2","e6e1","e6d6","e6d7","e6d5"],"d":[["e6e2",[]],["e6e1",[]],["e6d6",[]],["e6d7",[]],["e6d5",[]]]}]]]]}]]]]}},{"f":"1p6/8/8/k7/8/1Q6/8/1KB5 w - -","l":3,"t":"Queen & Bishop","tree":{"w":["b3b7"],"d":[["b3b7",[["a5a4",{"w":["c1d2"],"d":[["c1d2",[["a4a3",{"w":["b7b4"],"d":[["b7b4",[]]]}]]]]}]]]]}},{"f":"8/8/5R2/k7/8/5pK1/6Q1/8 w - -","l":3,"t":"Queen & Rook","tree":{"w":["g2b2"],"d":[["g2b2",[["f3f2",{"w":["g3f2"],"d":[["g3f2",[["a5a4",{"w":["f6a6"],"d":[["f6a6",[]]]}]]]]}],["a5a4",{"w":["b2b7","f6f7","f6f8","f6f3","f6b6","f6a6"],"d":[["b2b7",[["f3f2",{"w":["f6a6"],"d":[["f6a6",[]]]}],["a4a5",{"w":["f6a6"],"d":[["f6a6",[]]]}],["a4a3",{"w":["f6a6"],"d":[["f6a6",[]]]}]]],["f6f7",[["f3f2",{"w":["f7a7"],"d":[["f7a7",[]]]}],["a4a5",{"w":["f7a7"],"d":[["f7a7",[]]]}]]],["f6f8",[["f3f2",{"w":["f8a8"],"d":[["f8a8",[]]]}],["a4a5",{"w":["f8a8"],"d":[["f8a8",[]]]}]]],["f6f3",[["a4a5",{"w":["f3a3"],"d":[["f3a3",[]]]}]]],["f6b6",[["f3f2",{"w":["b2b4","b2a2","b2a1","b6a6"],"d":[["b2b4",[]],["b2a2",[]],["b2a1",[]],["b6a6",[]]]}],["a4a5",{"w":["b2b4","b2b5"],"d":[["b2b4",[]],["b2b5",[]]]}]]],["f6a6",[]]]}]]]]}},{"f":"3R4/8/8/2P5/2k5/8/3K4/1R6 w - -","l":3,"t":"Rook Pair & Pawn","tree":{"w":["c5c6"],"d":[["c5c6",[["c4c5",{"w":["c6c7"],"d":[["c6c7",[["c5c6",{"w":["c7c8q","c7c8r"],"d":[["c7c8q",[]],["c7c8r",[]]]}],["c5c4",{"w":["c7c8q","c7c8r"],"d":[["c7c8q",[]],["c7c8r",[]]]}]]]]}]]]]}},{"f":"7P/3k4/8/3K4/8/2Q5/8/8 w - -","l":3,"t":"Queen & Pawn","tree":{"w":["c3g7"],"d":[["c3g7",[["d7d8",{"w":["d5d6"],"d":[["d5d6",[["d8e8",{"w":["g7g8","g7e7"],"d":[["g7g8",[]],["g7e7",[]]]}],["d8c8",{"w":["g7c7"],"d":[["g7c7",[]]]}]]]]}],["d7e8",{"w":["d5d6","d5e6","d5c6"],"d":[["d5d6",[["e8d8",{"w":["g7g8","g7d7","g7f8"],"d":[["g7g8",[]],["g7d7",[]],["g7f8",[]]]}]]],["d5e6",[["e8d8",{"w":["g7d7"],"d":[["g7d7",[]]]}]]],["d5c6",[["e8d8",{"w":["g7d7","g7f8"],"d":[["g7d7",[]],["g7f8",[]]]}]]]]}],["d7c8",{"w":["d5c6"],"d":[["d5c6",[["c8d8",{"w":["g7d7","g7f8"],"d":[["g7d7",[]],["g7f8",[]]]}],["c8b8",{"w":["g7b7"],"d":[["g7b7",[]]]}]]]]}]]]]}},{"f":"8/8/8/5k2/8/5K2/6P1/3Q4 w - -","l":3,"t":"Queen & Pawn","tree":{"w":["d1d6"],"d":[["d1d6",[["f5g5",{"w":["g2g4"],"d":[["g2g4",[["g5h4",{"w":["d6h6"],"d":[["d6h6",[]]]}]]]]}]]]]}},{"f":"8/7p/6k1/8/6K1/8/6P1/RR6 w - -","l":3,"t":"Two Rooks","tree":{"w":["a1a6"],"d":[["a1a6",[["g6g7",{"w":["b1b7"],"d":[["b1b7",[["g7g8",{"w":["a6a8"],"d":[["a6a8",[]]]}],["g7h8",{"w":["a6a8"],"d":[["a6a8",[]]]}],["g7f8",{"w":["a6a8"],"d":[["a6a8",[]]]}]]]]}],["g6f7",{"w":["b1b7"],"d":[["b1b7",[["f7f8",{"w":["a6a8"],"d":[["a6a8",[]]]}],["f7g8",{"w":["a6a8"],"d":[["a6a8",[]]]}],["f7e8",{"w":["a6a8"],"d":[["a6a8",[]]]}]]]]}]]]]}},{"f":"8/7k/8/6K1/5R2/4P3/8/8 w - -","l":3,"t":"Rook & Pawn","tree":{"w":["g5f6"],"d":[["g5f6",[["h7h8",{"w":["f6f7"],"d":[["f6f7",[["h8h7",{"w":["f4h4"],"d":[["f4h4",[]]]}]]]]}],["h7g8",{"w":["f4h4","f6g6"],"d":[["f4h4",[["g8f8",{"w":["h4h8"],"d":[["h4h8",[]]]}]]],["f6g6",[["g8h8",{"w":["f4f8"],"d":[["f4f8",[]]]}]]]]}],["h7h6",{"w":["f4h4"],"d":[["f4h4",[]]]}]]]]}},{"f":"8/8/5R2/8/6k1/8/4R3/2K5 w - -","l":3,"t":"Two Rooks","tree":{"w":["e2g2"],"d":[["e2g2",[["g4h4",{"w":["f6f3","f6h6"],"d":[["f6f3",[["h4h5",{"w":["f3h3"],"d":[["f3h3",[]]]}]]],["f6h6",[]]]}],["g4h5",{"w":["c1c2","c1d1","c1b1","c1d2","c1b2","g2g7","g2g8","g2g1","f6f8","f6f4","f6f1","f6g6","f6e6","f6d6","f6c6","f6b6","f6a6"],"d":[["c1c2",[["h5h4",{"w":["f6h6"],"d":[["f6h6",[]]]}]]],["c1d1",[["h5h4",{"w":["f6h6"],"d":[["f6h6",[]]]}]]],["c1b1",[["h5h4",{"w":["f6h6"],"d":[["f6h6",[]]]}]]],["c1d2",[["h5h4",{"w":["f6h6"],"d":[["f6h6",[]]]}]]],["c1b2",[["h5h4",{"w":["f6h6"],"d":[["f6h6",[]]]}]]],["g2g7",[["h5h4",{"w":["f6h6"],"d":[["f6h6",[]]]}]]],["g2g8",[["h5h4",{"w":["f6h6"],"d":[["f6h6",[]]]}]]],["g2g1",[["h5h4",{"w":["f6h6"],"d":[["f6h6",[]]]}]]],["f6f8",[["h5h6",{"w":["f8h8"],"d":[["f8h8",[]]]}],["h5h4",{"w":["f8h8"],"d":[["f8h8",[]]]}]]],["f6f4",[["h5h6",{"w":["f4h4"],"d":[["f4h4",[]]]}]]],["f6f1",[["h5h6",{"w":["f1h1"],"d":[["f1h1",[]]]}],["h5h4",{"w":["f1h1"],"d":[["f1h1",[]]]}]]],["f6g6",[["h5h4",{"w":["g2h2","g6h6"],"d":[["g2h2",[]],["g6h6",[]]]}]]],["f6e6",[["h5h4",{"w":["e6h6"],"d":[["e6h6",[]]]}]]],["f6d6",[["h5h4",{"w":["d6h6"],"d":[["d6h6",[]]]}]]],["f6c6",[["h5h4",{"w":["c6h6"],"d":[["c6h6",[]]]}]]],["f6b6",[["h5h4",{"w":["b6h6"],"d":[["b6h6",[]]]}]]],["f6a6",[["h5h4",{"w":["a6h6"],"d":[["a6h6",[]]]}]]]]}],["g4h3",{"w":["g2g7","g2g8","f6g6"],"d":[["g2g7",[["h3h4",{"w":["f6h6"],"d":[["f6h6",[]]]}],["h3h2",{"w":["f6h6"],"d":[["f6h6",[]]]}]]],["g2g8",[["h3h4",{"w":["f6h6"],"d":[["f6h6",[]]]}],["h3h2",{"w":["f6h6"],"d":[["f6h6",[]]]}]]],["f6g6",[["h3h4",{"w":["g2h2","g6h6"],"d":[["g2h2",[]],["g6h6",[]]]}]]]]}]]]]}},{"f":"8/7k/8/8/8/8/3K3P/Q1B5 w - -","l":3,"t":"Queen & Bishop","tree":{"w":["a1f6"],"d":[["a1f6",[["h7g8",{"w":["f6g6"],"d":[["f6g6",[["g8h8",{"w":["c1b2"],"d":[["c1b2",[]]]}],["g8f8",{"w":["c1a3"],"d":[["c1a3",[]]]}]]]]}]]]]}},{"f":"2k5/8/8/2K5/3P4/8/8/2R5 w - -","l":3,"t":"Rook & Pawn","tree":{"w":["c5c6"],"d":[["c5c6",[["c8d8",{"w":["c1e1"],"d":[["c1e1",[["d8c8",{"w":["e1e8"],"d":[["e1e8",[]]]}]]]]}],["c8b8",{"w":["c1a1","c6b6"],"d":[["c1a1",[["b8c8",{"w":["a1a8"],"d":[["a1a8",[]]]}]]],["c6b6",[["b8a8",{"w":["c1c8"],"d":[["c1c8",[]]]}]]]]}]]]]}}];
+if (typeof module!=='undefined') module.exports=PUZZLES;
+if (typeof window!=='undefined') window.PUZZLES=PUZZLES;
+
+"use strict";
+// ============================================================
+// Chess Puzzles — 界面与对局逻辑（DOM + Canvas）
+// ============================================================
+var LEVELS_META = [
+  { name: "Mate in 1", req: 0 },
+  { name: "Mate in 2", req: 15 },
+  { name: "Mate in 3", req: 15 }
+];
+var PUZZLE_START = { 1: 0, 2: 40, 3: 75 }; // 各级在 PUZZLES 中的起始下标
+var PUZZLE_COUNT = { 1: 40, 2: 35, 3: 25 };
+
+// ---------- 进度存储 ----------
+var prog = { solved: {}, best: {}, streak: 0 };
+try {
+  var saved = JSON.parse(localStorage.getItem("cp_prog") || "{}");
+  if (saved && typeof saved === "object") {
+    prog.solved = saved.solved || {};
+    prog.best = saved.best || {};
+    prog.streak = saved.streak || 0;
+  }
+} catch (e) {}
+var muted = false;
+try { muted = localStorage.getItem("cp_mute") === "1"; } catch (e) {}
+function saveProg() { try { localStorage.setItem("cp_prog", JSON.stringify(prog)); } catch (e) {} }
+function solvedIn(level) {
+  var n = 0;
+  for (var i = PUZZLE_START[level]; i < PUZZLE_START[level] + PUZZLE_COUNT[level]; i++) if (prog.solved[i]) n++;
+  return n;
+}
+function levelUnlocked(level) { return level === 1 || solvedIn(level - 1) >= LEVELS_META[level - 1].req; }
+
+// ---------- 音效 ----------
+var actx = null;
+function ensureAudio() {
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === "suspended") actx.resume();
+  } catch (e) {}
+}
+function tone(freq, dur, type, gainv, delay) {
+  if (muted) return;
+  try {
+    ensureAudio();
+    var t0 = actx.currentTime + (delay || 0);
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = type || "sine"; o.frequency.value = freq;
+    g.gain.setValueAtTime(gainv || 0.1, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(t0); o.stop(t0 + dur);
+  } catch (e) {}
+}
+var sfx = {
+  move: function () { tone(190, 0.06, "square", 0.07); },
+  capture: function () { tone(130, 0.1, "square", 0.09); tone(90, 0.08, "triangle", 0.06, 0.03); },
+  check: function () { tone(660, 0.09, "sine", 0.1); tone(880, 0.12, "sine", 0.1, 0.09); },
+  win: function () { tone(523, 0.14, "triangle", 0.12); tone(659, 0.14, "triangle", 0.12, 0.12); tone(784, 0.16, "triangle", 0.12, 0.24); tone(1047, 0.3, "triangle", 0.14, 0.36); },
+  error: function () { tone(110, 0.18, "sawtooth", 0.07); },
+  select: function () { tone(320, 0.04, "sine", 0.05); }
+};
+
+// ---------- 画布 ----------
+var canvas = document.getElementById("board");
+var ctx = canvas.getContext("2d");
+var S = 520; // 逻辑边长
+var dpr = Math.min(window.devicePixelRatio || 1, 2);
+function fitCanvas() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var avail = Math.min(window.innerWidth - 20, window.innerHeight - 190, 560);
+  avail = Math.max(260, avail);
+  canvas.width = S * dpr; canvas.height = S * dpr;
+  canvas.style.width = avail + "px";
+  canvas.style.height = avail + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener("resize", function () { fitCanvas(); draw(); });
+
+// ---------- 对局状态 ----------
+var view = "menu";            // menu | grid | play
+var curLevel = 1, curIdx = -1; // curIdx: PUZZLES 全局下标
+var pos = null;               // 当前局面 (CP 状态)
+var node = null;              // 当前树节点
+var sel = -1;                 // 选中格
+var selMoves = [];            // 选中子的合法落点
+var lastMove = null;          // {from, to}
+var mistakes = 0;
+var startTime = 0, elapsed = 0, timerId = null;
+var anim = null;              // {piece, fromSq, toSq, t0, dur, cb}
+var promoPending = null;      // {from, to, white, cells:[sq]}
+var gameOver = false;
+var hintLevel = 0;
+
+function loadPuzzle(idx) {
+  curIdx = idx;
+  var p = PUZZLES[idx];
+  pos = CP.parseFEN(p.f + " 0 1");
+  node = p.tree;
+  sel = -1; selMoves = []; lastMove = null;
+  mistakes = 0; gameOver = false; anim = null; promoPending = null;
+  startTime = Date.now(); elapsed = 0;
+  if (timerId) clearInterval(timerId);
+  timerId = setInterval(function () {
+    if (gameOver || view !== "play") return;
+    elapsed = Math.floor((Date.now() - startTime) / 1000);
+    document.getElementById("timer").textContent = fmtTime(elapsed);
+  }, 500);
+  curLevel = p.l;
+  document.getElementById("pinfo").textContent = "#" + (idx - PUZZLE_START[p.l] + 1) + " · " + p.t;
+  document.getElementById("mateinfo").textContent = "Mate in " + p.l;
+  setStatus("White to move — find the forced checkmate.");
+  showView("play");
+  updateMistakesUI();
+  try {
+    if (window.__portal === "crazygames" && window.CrazyGames && window.CrazyGames.SDK) {
+      window.CrazyGames.SDK.game.gameplayStart();
+    }
+  } catch (e) {}
+}
+
+function fmtTime(sec) {
+  var m = Math.floor(sec / 60), s = sec % 60;
+  return m + ":" + (s < 10 ? "0" : "") + s;
+}
+function setStatus(msg, isErr) {
+  var el = document.getElementById("status");
+  el.textContent = msg;
+  el.className = isErr ? "err" : "";
+}
+function updateMistakesUI() {
+  document.getElementById("mistakes").textContent = mistakes > 0 ? ("✕ " + mistakes) : "";
+}
+
+// ---------- 走子流程 ----------
+function dmapFor(key) {
+  for (var i = 0; i < node.d.length; i++) if (node.d[i][0] === key) return node.d[i][1];
+  return null;
+}
+
+function tryPlayerMove(from, to, promoChar) {
+  var key = CP.sqName(from) + CP.sqName(to) + (promoChar || "");
+  var m = CP.findMove(pos, key);
+  if (!m) return false; // 非法着法
+  if (!dmapFor(key)) {
+    // 合法但不是谜题解着
+    mistakes++;
+    updateMistakesUI();
+    setStatus("That's not the move — try again.", true);
+    sfx.error();
+    sel = -1; selMoves = [];
+    return true; // 已处理(但不推进)
+  }
+  playMove(m, true, function () {
+    var defs = dmapFor(key);
+    if (!defs.length) { onCheckmate(); return; }
+    // 对手预存防着, 稍后应答
+    setTimeout(function () {
+      if (view !== "play" || gameOver) return;
+      var pick = defs[Math.floor(Math.random() * defs.length)];
+      var dm = CP.findMove(pos, pick[0]);
+      if (!dm) { onCheckmate(); return; } // 保险
+      node = pick[1];
+      playMove(dm, false, function () {
+        if (CP.inCheck(pos)) setStatus("Check! White to move.", false);
+        else setStatus("White to move — continue the attack.");
+        sel = -1; selMoves = [];
+      });
+    }, 320);
+  });
+  return true;
+}
+
+function playMove(m, byPlayer, cb) {
+  var moving = pos.board[m.from];
+  var isCap = !!pos.board[m.to] || m.flag === "e";
+  var checkNow = CP.inCheck(CP.makeMove(pos, m));
+  lastMove = { from: m.from, to: m.to };
+  var from = m.from, to = m.to;
+  pos = CP.makeMove(pos, m);
+  sel = -1; selMoves = [];
+  if (isCap) sfx.capture(); else sfx.move();
+  if (checkNow && !CP.isCheckmate(pos)) sfx.check();
+  if (m.flag === "k" || m.flag === "q") {
+    // 易位: 车也要动 — 直接同步展示, 不做双动画
+    anim = null;
+  }
+  anim = { piece: moving, fromSq: from, toSq: to, t0: performance.now(), dur: 170, cb: cb, promo: m.promo, flag: m.flag };
+  draw();
+}
+
+function onCheckmate() {
+  gameOver = true;
+  anim = null;
+  if (timerId) clearInterval(timerId);
+  sfx.win();
+  // 记录进度
+  var first = !prog.solved[curIdx];
+  prog.solved[curIdx] = 1;
+  var best = prog.best[curIdx];
+  if (!best || elapsed < best) prog.best[curIdx] = elapsed;
+  prog.streak++;
+  saveProg();
+  var p = PUZZLES[curIdx];
+  document.getElementById("winTitle").textContent = "Checkmate!";
+  document.getElementById("winSub").textContent =
+    p.t + " · Solved in " + fmtTime(elapsed) +
+    (mistakes ? " · " + mistakes + " wrong attempt" + (mistakes > 1 ? "s" : "") : " · Flawless!") +
+    (first ? " · First solve!" : " · Best " + fmtTime(prog.best[curIdx]));
+  document.getElementById("winStreak").textContent = "Streak: " + prog.streak;
+  document.getElementById("overlayWin").style.display = "flex";
+  draw();
+  try {
+    if (window.__portal === "crazygames" && window.CrazyGames && window.CrazyGames.SDK) {
+      window.CrazyGames.SDK.game.gameplayStop();
+      window.CrazyGames.SDK.game.happytime();
+    }
+  } catch (e) {}
+}
+
+function nextUnsolved(level) {
+  var start = PUZZLE_START[level], n = PUZZLE_COUNT[level];
+  for (var k = 1; k <= n; k++) {
+    var i = start + ((curIdx - start + k) % n);
+    if (!prog.solved[i]) return i;
+  }
+  return start + ((curIdx - start + 1) % n);
+}
+
+// ---------- 渲染 ----------
+var LIGHT = "#EBEDD4", DARK = "#739552";
+function draw() {
+  ctx.clearRect(0, 0, S, S);
+  var c = S / 8, r, f, sq, x, y;
+  // 格子
+  for (r = 0; r < 8; r++) for (f = 0; f < 8; f++) {
+    x = f * c; y = (7 - r) * c;
+    ctx.fillStyle = (r + f) % 2 === 0 ? LIGHT : DARK;
+    ctx.fillRect(x, y, c, c);
+  }
+  // 上一步标记
+  if (lastMove) {
+    ctx.fillStyle = "rgba(255,213,79,0.45)";
+    [[lastMove.from], [lastMove.to]].forEach(function (a) {
+      sq = a[0]; ctx.fillRect((sq & 7) * c, (7 - (sq >> 3)) * c, c, c);
+    });
+  }
+  // 被将高亮
+  if (pos && CP.inCheck(pos) && !gameOver) {
+    var ks = CP.kingSq(pos.board, pos.turn === "w");
+    if (ks >= 0) {
+      x = (ks & 7) * c; y = (7 - (ks >> 3)) * c;
+      var g = ctx.createRadialGradient(x + c / 2, y + c / 2, c * 0.1, x + c / 2, y + c / 2, c * 0.55);
+      g.addColorStop(0, "rgba(255,60,60,0.85)"); g.addColorStop(1, "rgba(255,60,60,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, c, c);
+    }
+  }
+  // 选中格
+  if (sel >= 0) {
+    ctx.fillStyle = "rgba(255,235,59,0.55)";
+    ctx.fillRect((sel & 7) * c, (7 - (sel >> 3)) * c, c, c);
+  }
+  // 坐标
+  ctx.fillStyle = "rgba(20,40,20,0.55)";
+  ctx.font = Math.round(c * 0.17) + "px sans-serif";
+  ctx.textAlign = "left"; ctx.textBaseline = "top";
+  for (f = 0; f < 8; f++) ctx.fillText("abcdefgh"[f], f * c + 3, 7 * c + c - c * 0.2);
+  ctx.textAlign = "right"; ctx.textBaseline = "bottom";
+  for (r = 0; r < 8; r++) ctx.fillText(String(r + 1), c * 0.96, (7 - r) * c + c * 0.98 - c * 0.82);
+  // 合法落点
+  if (selMoves.length) {
+    for (var i = 0; i < selMoves.length; i++) {
+      var to = selMoves[i].to;
+      x = (to & 7) * c + c / 2; y = (7 - (to >> 3)) * c + c / 2;
+      if (pos.board[to] || selMoves[i].flag === "e") {
+        ctx.strokeStyle = "rgba(20,30,10,0.35)";
+        ctx.lineWidth = c * 0.07;
+        ctx.beginPath(); ctx.arc(x, y, c * 0.42, 0, Math.PI * 2); ctx.stroke();
+      } else {
+        ctx.fillStyle = "rgba(20,30,10,0.28)";
+        ctx.beginPath(); ctx.arc(x, y, c * 0.14, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+  // 棋子
+  if (pos) {
+    for (sq = 0; sq < 64; sq++) {
+      var pc = pos.board[sq];
+      if (!pc) continue;
+      if (anim && sq === anim.toSq && !anim.done) continue; // 动画中的子
+      if (anim && sq === anim.fromSq) continue;
+      drawPiece(ctx, pc, (sq & 7) * c + c / 2, (7 - (sq >> 3)) * c + c / 2, c);
+    }
+  }
+  // 走子动画
+  if (anim) {
+    var t = Math.min(1, (performance.now() - anim.t0) / anim.dur);
+    var ease = 1 - Math.pow(1 - t, 3);
+    var fx = (anim.fromSq & 7) * c + c / 2, fy = (7 - (anim.fromSq >> 3)) * c + c / 2;
+    var tx = (anim.toSq & 7) * c + c / 2, ty = (7 - (anim.toSq >> 3)) * c + c / 2;
+    var pcDraw = anim.promo ? (anim.piece === anim.piece.toUpperCase() ? anim.promo.toUpperCase() : anim.promo) : anim.piece;
+    drawPiece(ctx, pcDraw, fx + (tx - fx) * ease, fy + (ty - fy) * ease, c * 1.02);
+    if (t >= 1) {
+      var cb = anim.cb; anim = null;
+      if (cb) cb();
+      draw();
+    }
+  }
+  // 升变选择浮层
+  if (promoPending) {
+    ctx.fillStyle = "rgba(10,20,10,0.65)";
+    ctx.fillRect(0, 0, S, S);
+    for (var k = 0; k < promoPending.cells.length; k++) {
+      sq = promoPending.cells[k];
+      x = (sq & 7) * c; y = (7 - (sq >> 3)) * c;
+      ctx.fillStyle = "#F4EFDF";
+      ctx.fillRect(x + 2, y + 2, c - 4, c - 4);
+      drawPiece(ctx, promoPending.white ? ["Q", "R", "B", "N"][k] : ["q", "r", "b", "n"][k], x + c / 2, y + c / 2, c);
+    }
+  }
+}
+
+// ---------- 程序化棋子 ----------
+function drawPiece(g, pc, cx, cy, s) {
+  var white = pc === pc.toUpperCase();
+  var t = pc.toLowerCase();
+  var fill = white ? "#FAF6EC" : "#3B3632";
+  var line = white ? "#454545" : "#151312";
+  var detail = white ? "rgba(70,70,70,0.9)" : "rgba(240,235,225,0.85)";
+  g.save();
+  g.translate(cx, cy);
+  var u = s / 8;
+  g.lineWidth = Math.max(1, u * 0.42);
+  g.strokeStyle = line;
+  g.fillStyle = fill;
+  g.lineJoin = "round"; g.lineCap = "round";
+
+  function base(w) { // 底座
+    g.beginPath();
+    var bw = w || 0.58 * s;
+    g.moveTo(-bw / 2, 0.30 * s);
+    g.quadraticCurveTo(-bw / 2, 0.21 * s, -bw / 2 + 0.06 * s, 0.21 * s);
+    g.lineTo(bw / 2 - 0.06 * s, 0.21 * s);
+    g.quadraticCurveTo(bw / 2, 0.21 * s, bw / 2, 0.30 * s);
+    g.closePath(); g.fill(); g.stroke();
+  }
+  function body(topW, botW, yTop, yBot) {
+    g.beginPath();
+    g.moveTo(-topW / 2, yTop);
+    g.lineTo(topW / 2, yTop);
+    g.quadraticCurveTo(botW / 2, (yTop + yBot) / 2, botW / 2, yBot);
+    g.lineTo(-botW / 2, yBot);
+    g.quadraticCurveTo(-botW / 2, (yTop + yBot) / 2, -topW / 2, yTop);
+    g.closePath(); g.fill(); g.stroke();
+  }
+
+  if (t === "p") {
+    body(0.22 * s, 0.34 * s, -0.08 * s, 0.21 * s);
+    g.beginPath(); g.arc(0, -0.17 * s, 0.14 * s, 0, Math.PI * 2); g.fill(); g.stroke();
+    base(0.5 * s);
+  } else if (t === "r") {
+    // 城垛顶
+    g.beginPath();
+    g.moveTo(-0.24 * s, -0.30 * s);
+    g.lineTo(-0.24 * s, -0.16 * s);
+    g.lineTo(0.24 * s, -0.16 * s);
+    g.lineTo(0.24 * s, -0.30 * s);
+    g.lineTo(0.13 * s, -0.30 * s); g.lineTo(0.13 * s, -0.24 * s);
+    g.lineTo(0.05 * s, -0.24 * s); g.lineTo(0.05 * s, -0.30 * s);
+    g.lineTo(-0.05 * s, -0.30 * s); g.lineTo(-0.05 * s, -0.24 * s);
+    g.lineTo(-0.13 * s, -0.24 * s); g.lineTo(-0.13 * s, -0.30 * s);
+    g.closePath(); g.fill(); g.stroke();
+    body(0.34 * s, 0.42 * s, -0.16 * s, 0.21 * s);
+    base(0.58 * s);
+  } else if (t === "n") {
+    g.beginPath();
+    g.moveTo(-0.18 * s, 0.21 * s);
+    g.lineTo(-0.20 * s, 0.02 * s);
+    g.quadraticCurveTo(-0.20 * s, -0.14 * s, -0.06 * s, -0.24 * s);
+    g.quadraticCurveTo(0.02 * s, -0.31 * s, 0.06 * s, -0.34 * s);
+    g.lineTo(0.09 * s, -0.26 * s);
+    g.lineTo(0.16 * s, -0.30 * s);
+    g.quadraticCurveTo(0.26 * s, -0.22 * s, 0.24 * s, -0.08 * s);
+    g.quadraticCurveTo(0.22 * s, 0.08 * s, 0.18 * s, 0.21 * s);
+    g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = detail;
+    g.beginPath(); g.arc(0.13 * s, -0.16 * s, u * 0.42, 0, Math.PI * 2); g.fill();
+    g.fillStyle = fill;
+    base(0.58 * s);
+  } else if (t === "b") {
+    body(0.16 * s, 0.36 * s, -0.20 * s, 0.21 * s);
+    g.beginPath(); g.ellipse(0, -0.26 * s, 0.13 * s, 0.16 * s, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.strokeStyle = detail; g.lineWidth = Math.max(1, u * 0.4);
+    g.beginPath(); g.moveTo(0.02 * s, -0.34 * s); g.lineTo(-0.06 * s, -0.20 * s); g.stroke();
+    g.strokeStyle = line; g.lineWidth = Math.max(1, u * 0.42);
+    g.beginPath(); g.arc(0, -0.44 * s, 0.05 * s, 0, Math.PI * 2); g.fill(); g.stroke();
+    base(0.56 * s);
+  } else if (t === "q") {
+    body(0.20 * s, 0.40 * s, -0.14 * s, 0.21 * s);
+    // 皇冠
+    g.beginPath();
+    g.moveTo(-0.24 * s, -0.16 * s);
+    g.lineTo(-0.28 * s, -0.36 * s);
+    g.lineTo(-0.13 * s, -0.24 * s);
+    g.lineTo(0, -0.42 * s);
+    g.lineTo(0.13 * s, -0.24 * s);
+    g.lineTo(0.28 * s, -0.36 * s);
+    g.lineTo(0.24 * s, -0.16 * s);
+    g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = detail;
+    [[-0.28, -0.38], [0, -0.45], [0.28, -0.38]].forEach(function (pt) {
+      g.beginPath(); g.arc(pt[0] * s, pt[1] * s, u * 0.5, 0, Math.PI * 2); g.fill();
+    });
+    g.fillStyle = fill;
+    base(0.6 * s);
+  } else { // k
+    body(0.22 * s, 0.42 * s, -0.12 * s, 0.21 * s);
+    // 十字
+    g.lineWidth = Math.max(1, u * 0.5);
+    g.beginPath();
+    g.moveTo(0, -0.44 * s); g.lineTo(0, -0.28 * s);
+    g.moveTo(-0.07 * s, -0.38 * s); g.lineTo(0.07 * s, -0.38 * s);
+    g.stroke();
+    // 顶冠
+    g.beginPath();
+    g.moveTo(-0.18 * s, -0.12 * s);
+    g.quadraticCurveTo(-0.22 * s, -0.26 * s, -0.10 * s, -0.26 * s);
+    g.quadraticCurveTo(0, -0.26 * s, 0, -0.28 * s);
+    g.quadraticCurveTo(0, -0.26 * s, 0.10 * s, -0.26 * s);
+    g.quadraticCurveTo(0.22 * s, -0.26 * s, 0.18 * s, -0.12 * s);
+    g.closePath(); g.fill(); g.stroke();
+    base(0.62 * s);
+  }
+  g.restore();
+}
+
+// ---------- 输入 ----------
+function sqAt(clientX, clientY) {
+  var rect = canvas.getBoundingClientRect();
+  var scale = S / rect.width;
+  var x = (clientX - rect.left) * scale, y = (clientY - rect.top) * scale;
+  var f = Math.floor(x / (S / 8)), row = Math.floor(y / (S / 8));
+  if (f < 0 || f > 7 || row < 0 || row > 7) return -1;
+  return (7 - row) * 8 + f;
+}
+function onPoint(clientX, clientY) {
+  ensureAudio();
+  if (view !== "play" || gameOver || anim) return;
+  // 升变选择浮层: 直接在指针事件里处理 (touchstart 的 preventDefault 会吞掉 click, 不能依赖 click)
+  if (promoPending) {
+    var psq = sqAt(clientX, clientY);
+    for (var pk = 0; pk < promoPending.cells.length; pk++) {
+      if (promoPending.cells[pk] === psq) { pickPromo(["q", "r", "b", "n"][pk]); return; }
+    }
+    promoPending = null; draw(); // 点别处取消
+    return;
+  }
+  var sq = sqAt(clientX, clientY);
+  if (sq < 0) return;
+  var isWhiteTurn = pos.turn === "w";
+  // 已选中且点击合法落点
+  if (sel >= 0) {
+    for (var i = 0; i < selMoves.length; i++) {
+      if (selMoves[i].to === sq) {
+        // 升变?
+        if (selMoves[i].promo) {
+          var white = pos.board[sel] === "P";
+          promoPending = { from: sel, to: sq, white: white, cells: [] };
+          var col = sq & 7;
+          var ranks = white ? [7, 6, 5, 4] : [0, 1, 2, 3];
+          for (var k = 0; k < 4; k++) promoPending.cells.push(ranks[k] * 8 + col);
+          draw();
+          return;
+        }
+        tryPlayerMove(sel, sq, "");
+        draw();
+        return;
+      }
+    }
+  }
+  // 点己方子: 选中 / 换选
+  var pc = pos.board[sq];
+  if (pc && pc === pc.toUpperCase() === isWhiteTurn && isWhiteTurn) {
+    if (sel === sq) { sel = -1; selMoves = []; }
+    else {
+      sel = sq;
+      selMoves = CP.legalMoves(pos).filter(function (m) { return m.from === sq; });
+      sfx.select();
+    }
+  } else {
+    sel = -1; selMoves = [];
+  }
+  draw();
+}
+canvas.addEventListener("mousedown", function (e) { onPoint(e.clientX, e.clientY); });
+canvas.addEventListener("touchstart", function (e) {
+  e.preventDefault();
+  onPoint(e.touches[0].clientX, e.touches[0].clientY);
+}, { passive: false });
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape" && view === "play") backToMenu();
+});
+
+function pickPromo(ch) {
+  if (!promoPending) return;
+  var from = promoPending.from, to = promoPending.to;
+  promoPending = null;
+  tryPlayerMove(from, to, ch);
+  draw();
+}
+
+// ---------- 视图切换 ----------
+function showView(v) {
+  view = v;
+  document.getElementById("viewMenu").style.display = v === "menu" ? "block" : "none";
+  document.getElementById("viewGrid").style.display = v === "grid" ? "block" : "none";
+  document.getElementById("viewPlay").style.display = v === "play" ? "flex" : "none";
+  document.getElementById("overlayWin").style.display = "none";
+  if (v === "menu") renderMenu();
+  if (v === "grid") renderGrid();
+  if (v === "play") fitCanvas();
+  draw();
+}
+function backToMenu() {
+  // 中途放弃: 连胜清零
+  if (view === "play" && !gameOver) { prog.streak = 0; saveProg(); }
+  if (timerId) clearInterval(timerId);
+  showView("menu");
+  try {
+    if (window.__portal === "crazygames" && window.CrazyGames && window.CrazyGames.SDK) {
+      window.CrazyGames.SDK.game.gameplayStop();
+    }
+  } catch (e) {}
+}
+function renderMenu() {
+  var total = 0;
+  for (var k in prog.solved) total++;
+  document.getElementById("mSolved").textContent = total + " / 100";
+  document.getElementById("mStreak").textContent = prog.streak;
+  for (var l = 1; l <= 3; l++) {
+    var el = document.getElementById("lvl" + l);
+    var unlocked = levelUnlocked(l);
+    el.className = "level" + (unlocked ? "" : " locked");
+    el.querySelector(".prog").textContent = unlocked
+      ? (solvedIn(l) + " / " + PUZZLE_COUNT[l] + " solved")
+      : ("Solve " + (LEVELS_META[l - 1].req - solvedIn(l - 1)) + " more in \"Mate in " + (l - 1) + "\" to unlock");
+    el.querySelector(".go").textContent = unlocked ? "Play" : "Locked";
+  }
+}
+function renderGrid() {
+  var grid = document.getElementById("pgrid");
+  grid.innerHTML = "";
+  var start = PUZZLE_START[curLevel];
+  for (var i = 0; i < PUZZLE_COUNT[curLevel]; i++) {
+    var idx = start + i;
+    var d = document.createElement("button");
+    d.className = "pz" + (prog.solved[idx] ? " done" : "");
+    var best = prog.best[idx];
+    d.innerHTML = "<b>" + (i + 1) + "</b>" +
+      (prog.solved[idx] ? "<i>✓" + (best !== undefined ? " " + fmtTime(best) : "") + "</i>" : "<i>" + PUZZLES[idx].t + "</i>");
+    (function (ii) { d.addEventListener("click", function () { ensureAudio(); loadPuzzle(ii); }); })(idx);
+    grid.appendChild(d);
+  }
+  document.getElementById("gridTitle").textContent = LEVELS_META[curLevel - 1].name + " — " + PUZZLE_COUNT[curLevel] + " puzzles";
+}
+
+// ---------- 菜单/界面事件 ----------
+[1, 2, 3].forEach(function (l) {
+  document.getElementById("lvl" + l).addEventListener("click", function () {
+    ensureAudio();
+    if (!levelUnlocked(l)) return;
+    curLevel = l;
+    showView("grid");
+  });
+});
+document.getElementById("backMenu1").addEventListener("click", backToMenu);
+document.getElementById("backMenu2").addEventListener("click", backToMenu);
+document.getElementById("btnRestart").addEventListener("click", function () {
+  if (view === "play") loadPuzzle(curIdx);
+});
+document.getElementById("btnMute").addEventListener("click", function () {
+  muted = !muted;
+  try { localStorage.setItem("cp_mute", muted ? "1" : "0"); } catch (e) {}
+  document.getElementById("btnMute").textContent = muted ? "♪̸" : "♪";
+});
+document.getElementById("btnWinNext").addEventListener("click", function () {
+  loadPuzzle(nextUnsolved(curLevel));
+});
+document.getElementById("btnWinList").addEventListener("click", function () {
+  showView("grid");
+});
+document.getElementById("btnWinMenu").addEventListener("click", backToMenu);
+// 升变选择已并入 onPoint (统一 mouse/touch 路径)
+
+// ---------- 主循环 ----------
+var framePending = false;
+function loop() {
+  if (view === "play") {
+    if (anim || promoPending) { draw(); }
+    else if (!framePending) { framePending = true; draw(); framePending = false; }
+  }
+  requestAnimationFrame(loop);
+}
+fitCanvas();
+document.getElementById("btnMute").textContent = muted ? "♪̸" : "♪";
+showView("menu");
+requestAnimationFrame(loop);
+// 调试钩子
+window.__cpGame = {
+  get pos() { return pos; }, get node() { return node; }, get view() { return view; },
+  get gameOver() { return gameOver; },
+  play: function (idx) { loadPuzzle(idx); },
+  move: function (key) {
+    var m = CP.findMove(pos, key);
+    if (!m) return false;
+    tryPlayerMove(m.from, m.to, m.promo || "");
+    return true;
+  }
+};
+
+</script>
+</body>
+</html>
